@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Quản lý Danh mục • Đơn vị tính • Thương hiệu</title>
+<style>
+  :root{--bg:#0f172a;--card:#0b1226;--text:#e2e8f0;--muted:#94a3b8;--pri:#10b981;--ring:rgba(16,185,129,.35)}
+  body{margin:0;background:#0f172a;color:var(--text);font:15px/1.6 ui-sans-serif,system-ui}
+  .wrap{max-width:1100px;margin:32px auto;padding:0 16px}
+  h1{margin:0 0 18px;font-size:26px}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+  @media (max-width:980px){.grid{grid-template-columns:1fr}}
+  .card{background:linear-gradient(180deg,rgba(255,255,255,.02),transparent),var(--card);
+    border:1px solid rgba(148,163,184,.12);border-radius:14px;padding:16px;box-shadow:0 16px 48px rgba(0,0,0,.3)}
+  .title{font-size:13px;text-transform:uppercase;letter-spacing:.15em;color:#cbd5e1;margin-bottom:10px}
+  select,input{width:100%;background:#0a1021;color:var(--text);border:1px solid rgba(148,163,184,.2);
+    border-radius:10px;padding:10px 12px;outline:none}
+  select:focus,input:focus{border-color:var(--pri);box-shadow:0 0 0 4px var(--ring)}
+  .row{display:grid;grid-template-columns:1fr;gap:10px;margin:10px 0}
+  .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+  .btn-save{background:var(--pri);color:#052e27}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px}
+  .ok{color:#34d399}.err{color:#f87171}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Quản lý Danh mục • Đơn vị tính • Thương hiệu</h1>
+  <div class="grid">
+    <!-- Danh mục -->
+    <section class="card">
+      <div class="title">Danh mục (bảng danhmuc)</div>
+      <div class="row">
+        <select id="dm-list"></select>
+        <input id="dm-name" placeholder="Tên danh mục"/>
+        <button class="btn btn-save" onclick="save('danhmuc')">Lưu thay đổi</button>
+        <div id="dm-msg" class="hint"></div>
+      </div>
+    </section>
+    <!-- Đơn vị tính -->
+    <section class="card">
+      <div class="title">Đơn vị tính (bảng donvitinh)</div>
+      <div class="row">
+        <select id="dv-list"></select>
+        <input id="dv-name" placeholder="Tên đơn vị tính"/>
+        <button class="btn btn-save" onclick="save('donvitinh')">Lưu thay đổi</button>
+        <div id="dv-msg" class="hint"></div>
+      </div>
+    </section>
+    <!-- Thương hiệu -->
+    <section class="card">
+      <div class="title">Thương hiệu (bảng thuonghieu)</div>
+      <div class="row">
+        <select id="th-list"></select>
+        <input id="th-name" placeholder="Tên thương hiệu"/>
+        <button class="btn btn-save" onclick="save('thuonghieu')">Lưu thay đổi</button>
+        <div id="th-msg" class="hint"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const API_GET = '/nhathuocankhang/api/refdata_get.php';
+const API_PUT = '/nhathuocankhang/api/refdata_put.php';
+
+async function loadOne(type, selId, inputId){
+  const res = await fetch(`${API_GET}?type=${type}`);
+  const data = await res.json();
+  const sel = document.getElementById(selId);
+  sel.innerHTML = data.items.map(it => `<option value="${it.id}">${it.id} - ${it.name}</option>`).join('');
+  sel.onchange = () => document.getElementById(inputId).value = sel.options[sel.selectedIndex].text.replace(/^[0-9]+ - /,'');
+  if (sel.options.length) sel.onchange();
+}
+
+async function save(type){
+  const map = {
+    danhmuc:   {sel:'dm-list', input:'dm-name', msg:'dm-msg'},
+    donvitinh: {sel:'dv-list', input:'dv-name', msg:'dv-msg'},
+    thuonghieu:{sel:'th-list', input:'th-name', msg:'th-msg'}
+  };
+  const m = map[type];
+  const id = document.getElementById(m.sel).value;
+  const name = document.getElementById(m.input).value.trim();
+  const msg = document.getElementById(m.msg);
+  msg.textContent = 'Đang lưu...';
+
+  const res = await fetch(API_PUT, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({type, id, name})
+  });
+  const data = await res.json();
+  if(res.ok){
+    msg.innerHTML = `<span class="ok">Đã cập nhật: ${data.updated.id} - ${data.updated.name}</span>`;
+    // reload danh sách để hiển thị tên mới
+    await loadOne(type, m.sel, m.input);
+  }else{
+    msg.innerHTML = `<span class="err">${data.error || 'Lỗi'}</span>`;
+  }
+}
+
+async function boot(){
+  await Promise.all([
+    loadOne('danhmuc','dm-list','dm-name'),
+    loadOne('donvitinh','dv-list','dv-name'),
+    loadOne('thuonghieu','th-list','th-name'),
+  ]);
+}
+boot();
+</script>
+</body>
+</html>

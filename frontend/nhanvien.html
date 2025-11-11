@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Quản lý Nhân viên • Nhà thuốc</title>
+<style>
+:root{--bg:#0e1a3a;--panel:#0b1633;--text:#eaf2ff;--muted:#93a4c4;--pri:#2563eb;--pri2:#1d4ed8;--ok:#10b981}
+*{box-sizing:border-box} body{margin:0;background:radial-gradient(1200px 600px at 70% -100px,rgba(59,130,246,.25),transparent),var(--bg);color:var(--text);font:15px/1.6 ui-sans-serif,system-ui}
+.wrap{max-width:1140px;margin:28px auto;padding:0 16px}
+h1{margin:0 0 16px;font-size:26px}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+@media (max-width:980px){.grid{grid-template-columns:1fr}}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.03),transparent),var(--panel);border:1px solid rgba(147,164,196,.12);border-radius:16px;padding:14px;box-shadow:0 18px 48px rgba(0,0,0,.35)}
+.search{display:flex;gap:10px;margin-bottom:8px}
+input,select{background:#0a1530;border:1px solid rgba(147,164,196,.25);border-radius:12px;padding:10px;color:var(--text);outline:none}
+input:focus,select:focus{border-color:var(--pri);box-shadow:0 0 0 4px rgba(37,99,235,.3)}
+.btn{border:0;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer}
+.btn-pri{background:linear-gradient(180deg,var(--pri),var(--pri2));color:#fff}
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{padding:8px;border-bottom:1px dashed rgba(147,164,196,.18);text-align:left}
+.badge{padding:2px 8px;border-radius:999px;background:rgba(16,185,129,.15);color:#bbf7d0;font-weight:700;font-size:12px}
+.row:hover{background-color:rgba(37,99,235,.08)}
+.pulse{animation:p .5s ease-in-out} @keyframes p{0%{transform:scale(1)}60%{transform:scale(1.03)}100%{transform:scale(1)}}
+.hint{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Quản lý Nhân viên</h1>
+  <div class="grid">
+    <!-- Danh sách -->
+    <section class="card">
+      <div class="search">
+        <input id="q" placeholder="Tìm theo tên…" oninput="loadList()">
+        <select id="sort" onchange="loadList()">
+          <option value="hoten">Tên</option><option value="ngayvl">Ngày vào làm</option><option value="ns">Năm sinh</option>
+        </select>
+        <select id="dir" onchange="loadList()"><option value="asc">↑</option><option value="desc">↓</option></select>
+        <button class="btn btn-pri" onclick="resetForm()">Thêm mới</button>
+      </div>
+      <table class="table">
+        <thead><tr><th>Mã</th><th>Họ tên</th><th>Giới tính</th><th>Ngày sinh</th><th>Ngày vào</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="hint" id="count"></div>
+    </section>
+
+    <!-- Form -->
+    <section class="card" id="formCard">
+      <div class="hint">Nhấn vào một dòng để sửa</div>
+      <input id="manv" type="hidden" value="0">
+      <div style="display:grid;gap:10px;margin-top:8px">
+        <input id="hoten" placeholder="Họ tên">
+        <select id="gt"><option>Nam</option><option>Nữ</option><option>Khác</option></select>
+        <input id="ns" type="date" placeholder="Ngày sinh">
+        <input id="ngayvl" type="date" placeholder="Ngày vào làm">
+        <button class="btn btn-pri" onclick="save()" id="saveBtn">Lưu</button>
+        <div class="hint" id="note"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const API_GET='/nhathuocankhang/api/nhanvien_get.php';
+const API_PUT='/nhathuocankhang/api/nhanvien_put.php';
+
+async function loadList(page=1){
+  const q=document.getElementById('q').value.trim();
+  const sort=document.getElementById('sort').value;
+  const dir=document.getElementById('dir').value;
+  const url=`${API_GET}?page=${page}&limit=20&sort=${sort}&dir=${dir}&q=${encodeURIComponent(q)}`;
+  const res=await fetch(url); const data=await res.json();
+  const tb=document.getElementById('tbody');
+  tb.innerHTML=data.items.map(r=>`
+    <tr class="row" onclick="edit(${r.manv})">
+      <td>${r.manv}</td><td>${r.hoten}</td><td>${r.gt}</td>
+      <td>${r.ns || ''}</td><td>${r.ngayvl || ''}</td>
+    </tr>`).join('');
+  document.getElementById('count').textContent=`${data.total} nhân viên`;
+}
+
+function resetForm(){
+  manv.value=0; hoten.value=''; gt.value='Nam'; ns.value=''; ngayvl.value='';
+  document.getElementById('formCard').classList.add('pulse');
+  setTimeout(()=>document.getElementById('formCard').classList.remove('pulse'),400);
+}
+
+async function edit(id){
+  const res=await fetch(`${API_GET}?id=${id}`); const r=await res.json();
+  manv.value=r.manv; hoten.value=r.hoten; gt.value=r.gt; ns.value=r.ns||''; ngayvl.value=r.ngayvl||'';
+  document.getElementById('formCard').classList.add('pulse');
+  setTimeout(()=>document.getElementById('formCard').classList.remove('pulse'),400);
+}
+
+async function save(){
+  const body={
+    manv:Number(manv.value||0),
+    hoten:hoten.value.trim(),
+    gt:gt.value,
+    ns:ns.value||null,
+    ngayvl:ngayvl.value||null
+  };
+  const res=await fetch(API_PUT,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const data=await res.json();
+  const note=document.getElementById('note');
+  if(res.ok){
+    note.textContent=`Đã lưu: #${data.saved.manv} - ${data.saved.hoten}`;
+    loadList();
+    document.getElementById('saveBtn').classList.add('pulse');
+    setTimeout(()=>document.getElementById('saveBtn').classList.remove('pulse'),400);
+  }else{
+    note.textContent=data.error||'Lỗi';
+  }
+}
+
+loadList();
+</script>
+</body>
+</html>

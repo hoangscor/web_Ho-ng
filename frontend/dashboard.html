@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Dashboard • Nhà thuốc</title>
+<style>
+:root{--bg:#0e1a3a;--panel:#0b1633;--text:#eaf2ff;--muted:#93a4c4;--brand:#2563eb;--brand2:#1d4ed8;--ok:#10b981}
+*{box-sizing:border-box} body{margin:0;background:radial-gradient(1200px 600px at 70% -100px,rgba(59,130,246,.25),transparent),var(--bg);color:var(--text);font:15px/1.6 ui-sans-serif,system-ui}
+.wrap{max-width:1160px;margin:28px auto;padding:0 16px}
+h1{margin:0 0 18px;font-size:26px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media (max-width:980px){.grid{grid-template-columns:1fr}}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.03),transparent),var(--panel);border:1px solid rgba(147,164,196,.12);border-radius:16px;padding:14px;box-shadow:0 18px 48px rgba(0,0,0,.35)}
+.kpi{display:flex;align-items:center;justify-content:space-between}
+.kpi .val{font-size:24px;font-weight:800}
+.kpi .lbl{color:var(--muted);font-size:12px}
+.controls{display:flex;gap:10px;margin:10px 0}
+input,select{background:#0a1530;border:1px solid rgba(147,164,196,.25);border-radius:12px;padding:10px;color:var(--text);outline:none}
+.btn{border:0;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer;background:linear-gradient(180deg,var(--brand),var(--brand2));color:#fff}
+.section{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+@media (max-width:980px){.section{grid-template-columns:1fr}}
+.canvas{width:100%;height:280px}
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{padding:8px;border-bottom:1px dashed rgba(147,164,196,.18);text-align:left}
+.badge{padding:2px 8px;border-radius:999px;background:rgba(16,185,129,.15);color:#bbf7d0;font-weight:700;font-size:12px}
+.pulse{animation:p .6s ease} @keyframes p{0%{transform:scale(1)}60%{transform:scale(1.04)}100%{transform:scale(1)}}
+.money{font-variant-numeric:tabular-nums;text-align:right}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Dashboard doanh thu</h1>
+
+  <div class="grid">
+    <div class="card kpi"><div><div class="lbl">Hôm nay</div><div id="kpi-today" class="val">0</div></div><span class="badge">VNĐ</span></div>
+    <div class="card kpi"><div><div class="lbl">Tháng này</div><div id="kpi-month" class="val">0</div></div><span class="badge">VNĐ</span></div>
+    <div class="card">
+      <div class="lbl">Khoảng xem</div>
+      <div class="controls">
+        <select id="days"><option>7</option><option selected>30</option><option>60</option></select>
+        <select id="months"><option>6</option><option selected>12</option><option>24</option></select>
+        <button class="btn" onclick="loadAll()">Tải</button>
+      </div>
+      <div class="lbl">Top bán chạy (30 ngày)</div>
+    </div>
+  </div>
+
+  <div class="section" style="margin-top:14px">
+    <div class="card">
+      <div class="lbl">Doanh thu theo ngày</div>
+      <canvas id="line" class="canvas"></canvas>
+    </div>
+    <div class="card">
+      <div class="lbl">Doanh thu theo tháng</div>
+      <canvas id="bar" class="canvas"></canvas>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <table class="table" id="top">
+      <thead><tr><th>SP</th><th>SL</th><th class="money">Doanh thu</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const API_SUM = '/nhathuocankhang/api/dashboard_doanhthu_get.php';
+const API_TOP = '/nhathuocankhang/api/dashboard_top_get.php';
+
+function fmt(n){ return Intl.NumberFormat('vi-VN').format(Math.round(n||0)); }
+function lastNDays(n){ const to=new Date(); const from=new Date(); from.setDate(to.getDate()-n); return [from,to]; }
+
+async function loadAll(){
+  const days = +document.getElementById('days').value;
+  const months = +document.getElementById('months').value;
+
+  const sum = await (await fetch(`${API_SUM}?days=${days}&months=${months}`)).json();
+  document.getElementById('kpi-today').textContent = fmt(sum.today);
+  document.getElementById('kpi-month').textContent = fmt(sum.thisMonth);
+  document.getElementById('kpi-today').parentElement.parentElement.classList.add('pulse');
+  setTimeout(()=>document.getElementById('kpi-today').parentElement.parentElement.classList.remove('pulse'),300);
+
+  drawLine('line', sum.byDay.map(x=>x.ngay), sum.byDay.map(x=>+x.doanhthu));
+  drawBar('bar', sum.byMonth.map(x=>x.ym), sum.byMonth.map(x=>+x.doanhthu));
+
+  const [from,to] = lastNDays(30);
+  const f = from.toISOString().slice(0,10), t = to.toISOString().slice(0,10);
+  const top = await (await fetch(`${API_TOP}?from=${f}&to=${t}&limit=10`)).json();
+  const tb = document.querySelector('#top tbody');
+  tb.innerHTML = top.items.map(r=>`<tr><td>${r.tensp}</td><td>${r.sl}</td><td class="money">${fmt(r.doanhthu)}</td></tr>`).join('');
+}
+
+/* Simple chart without libraries */
+function drawLine(id, labels, data){
+  const c=document.getElementById(id), w=c.clientWidth, h=c.clientHeight; c.width=w; c.height=h;
+  const ctx=c.getContext('2d');
+  const pad=36, max=Math.max(1, ...data), step=(w-pad*2)/(Math.max(1,data.length-1));
+  ctx.clearRect(0,0,w,h);
+  ctx.strokeStyle='rgba(59,130,246,.6)'; ctx.lineWidth=2;
+  ctx.beginPath();
+  data.forEach((v,i)=>{
+    const x=pad+i*step, y=h-pad-(v/max)*(h-pad*2);
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  // fill
+  const grad=ctx.createLinearGradient(0,0,0,h); grad.addColorStop(0,'rgba(59,130,246,.35)'); grad.addColorStop(1,'rgba(59,130,246,0)');
+  ctx.lineTo(w-pad,h-pad); ctx.lineTo(pad,h-pad); ctx.closePath(); ctx.fillStyle=grad; ctx.fill();
+}
+
+function drawBar(id, labels, data){
+  const c=document.getElementById(id), w=c.clientWidth, h=c.clientHeight; c.width=w; c.height=h;
+  const ctx=c.getContext('2d'); ctx.clearRect(0,0,w,h);
+  const pad=36, max=Math.max(1,...data), n=data.length, bw=(w-pad*2)/n*0.7, gap=(w-pad*2)/n*0.3;
+  let x=pad+gap/2; let i=0;
+  const animStart=performance.now(), dur=500;
+  (function anim(t){
+    const k=Math.min(1,(t-animStart)/dur);
+    ctx.clearRect(0,0,w,h);
+    for(i=0;i<n;i++){
+      const v=data[i]*k; const bh=(v/max)*(h-pad*2); const y=h-pad-bh;
+      ctx.fillStyle='rgba(16,185,129,.85)';
+      ctx.fillRect(x+i*(bw+gap), y, bw, bh);
+    }
+    if(k<1) requestAnimationFrame(anim);
+  })(animStart);
+}
+
+loadAll();
+</script>
+</body>
+</html>
